@@ -130,7 +130,7 @@ Ja0: [2.0, 1.0]
 # External rate
 M0: 1.0
 # Variance of the noise
-VAR_FF: [0.25, 0.25]
+VAR_FF: [0.1, 0.1]
 
 ##########################################
 # Synaptic strengths

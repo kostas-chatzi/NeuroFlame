@@ -13,16 +13,40 @@ class Hebbian:
         self.ETA_DT = ETA * DT
         self.CORR_FRAC = CORR_FRAC
 
-
     def spatial_sum(self, rates):
-        neighborhood = int(rates.shape[-1] * self.CORR_FRAC)
-        kernel = torch.ones(1, 1, neighborhood) / neighborhood
         # rates: [N_BATCH, N_NEURONS]
-        rates_unsq = rates.unsqueeze(1)  # [N_BATCH, 1, N_NEURONS]
-        # Apply moving average (sum)
-        summed = F.conv1d(rates_unsq, kernel.to(rates.device), padding='same')
-        # summed.shape: [N_BATCH, 1, N_NEURONS]
+        N = rates.shape[-1]
+        neighborhood = int(N * self.CORR_FRAC)
+        if neighborhood < 1:
+            return rates  # or handle as you like
+
+        # Force odd kernel size so it's symmetric
+        if neighborhood % 2 == 0:
+            neighborhood += 1
+
+        pad = neighborhood // 2
+        kernel = torch.ones(1, 1, neighborhood, device=rates.device) / neighborhood
+
+        # [N_BATCH, 1, N_NEURONS]
+        x = rates.unsqueeze(1)
+
+        # circular pad: take last `pad` and first `pad` elements
+        x_padded = torch.cat([x[..., -pad:], x, x[..., :pad]], dim=-1)
+
+        # conv without padding; output length stays N_NEURONS
+        summed = F.conv1d(x_padded, kernel, padding=0)
+
         return summed.squeeze(1)  # [N_BATCH, N_NEURONS]
+
+    # def spatial_sum(self, rates):
+    #     neighborhood = int(rates.shape[-1] * self.CORR_FRAC)
+    #     kernel = torch.ones(1, 1, neighborhood) / neighborhood
+    #     # rates: [N_BATCH, N_NEURONS]
+    #     rates_unsq = rates.unsqueeze(1)  # [N_BATCH, 1, N_NEURONS]
+    #     # Apply moving average (sum)
+    #     summed = F.conv1d(rates_unsq, kernel.to(rates.device), padding='same')
+    #     # summed.shape: [N_BATCH, 1, N_NEURONS]
+    #     return summed.squeeze(1)  # [N_BATCH, N_NEURONS]
 
 
     def hebbian_learning(self, pre, post, avg_pre=None, avg_post=None, weights=None):

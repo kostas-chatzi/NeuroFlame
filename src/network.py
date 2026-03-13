@@ -377,8 +377,10 @@ class Network(nn.Module):
 
             if IF_INIT:
                 self.hebb_rates_last = torch.zeros_like(hebb_rates.detach())
+                W_hebb = torch.zeros_like(Wab_T)
             else:
                 hebb_rates = self.hebb_rates_last
+                W_hebb = self.W_hebb_T
 
         W_stp_T = None
         if self.IF_STP:
@@ -425,6 +427,7 @@ class Network(nn.Module):
         ff_prev = 0
         mv_rates, mv_ff, mv_rec = 0, 0, 0
         rates_list, ff_list, rec_list = [], [], []
+        self.W_hebb_history = []
 
         # Temporal loop
         for step in range(self.N_STEPS):
@@ -436,21 +439,32 @@ class Network(nn.Module):
                     for i in range(self.N_POP): # post
                         post = rates[:, self.slices[i]]
                         if self.IS_HEBB[j+i*self.N_POP]:
-                            W_hebb = self.hebb(pre, post, hebb_rates[:, self.slices[j]], hebb_rates[:, self.slices[i]])
-                            W_hebb /= torch.sqrt(self.Ka[0])
+                            W_hebb_ = self.hebb(pre, post, hebb_rates[:, self.slices[j]], hebb_rates[:, self.slices[i]])
+                            W_hebb_ /= torch.sqrt(self.Ka[0])
 
+                            W_hebb[:, self.slices[j], self.slices[i]] = W_hebb[:, self.slices[j], self.slices[i]] * self.EXP_HEBB
+                            W_hebb[:, self.slices[j], self.slices[i]] = W_hebb[:, self.slices[j], self.slices[i]] + W_hebb_ * (1.0 - self.EXP_HEBB)
+                            # W_hebb[:, self.slices[j], self.slices[i]] = W_hebb[:, self.slices[j], self.slices[i]] + W_hebb_
+                            
                             # W_hebb = W_hebb.transpose(1, 2) / torch.sqrt(self.Ka[0])
-                            # if j==0:
-                            #     W_hebb = W_hebb.clamp(min=0.0)
-                            # else:
-                            #     W_hebb = W_hebb.clamp(max=0.0)
+                            if j==0:
+                                W_hebb = W_hebb.clamp(min=0.0)
+                            else:
+                                W_hebb = W_hebb.clamp(max=0.0)
 
-                            Wab_T[:, self.slices[j], self.slices[i]] = self.Wab_T[self.slices[j], self.slices[i]].unsqueeze(0)
-                            Wab_T[:, self.slices[j], self.slices[i]] += W_hebb
+                            # W_hebb_history.append(W_hebb[:, self.slices[j], self.slices[i]] )#W_hebb[:, self.slices[j], self.slices[i]])
+                            # if i==0 and j==0:
+                            #     self.W_hebb_history.append(W_hebb[:, self.slices[j], self.slices[i]])
+
+                            # Wab_T[:, self.slices[j], self.slices[i]] = self.Wab_T[self.slices[j], self.slices[i]].unsqueeze(0)
+                            Wab_T[:, self.slices[j], self.slices[i]] = W_hebb[:, self.slices[j], self.slices[i]]
+                # print(W_hebb.mean())
+                # self.W_hebb_history.append(W_hebb_) #W_hebb[:, self.slices[j], self.slices[i]])
 
                 Wab_T[:, self.slices[0]] = Wab_T[:, self.slices[0]].clamp(min=0.0)
                 Wab_T[:, self.slices[1]] = Wab_T[:, self.slices[1]].clamp(max=0.0)
-
+                # Wab_T[:, self.slices[0]] = Wab_T[:, self.slices[0]].clamp(max=10.0)
+                # Wab_T[:, self.slices[1]] = Wab_T[:, self.slices[1]].clamp(min=-10.0)
                 # Wab_T = self.Wab_T.unsqueeze(0) + Wab_T_train
 
                 if self.HEBB_TYPE=='bcm':
@@ -518,7 +532,11 @@ class Network(nn.Module):
                 mv_rec = 0
 
         if self.IF_HEBB:
-            self.W_hebb_T = Wab_T
+            # self.Wab_T = Wab_T
+            self.W_hebb_T = W_hebb
+            # self.hebb_hist = W_hebb_history
+            # self.W_hebb_history = torch.stack(self.W_hebb_history)
+
 
         # returns full sequence
         if REC_LAST_ONLY == 0:
