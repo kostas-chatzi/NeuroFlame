@@ -333,7 +333,7 @@ class Network(nn.Module):
         return self
 
 
-    def forward(self, ff_input=None, REC_LAST_ONLY=0, RET_FF=0, RET_STP=0, RET_REC=0, IF_INIT=1):
+    def forward(self, ff_input=None, REC_LAST_ONLY=0, RET_FF=0, RET_STP=0, RET_REC=0, RET_ADAPT=0, RET_HEBB=0, IF_INIT=1):
         """
         Main method of Network class, runs networks dynamics over set of timesteps
         and returns rates at each time point or just the last time point.
@@ -427,7 +427,8 @@ class Network(nn.Module):
         ff_prev = 0
         mv_rates, mv_ff, mv_rec = 0, 0, 0
         rates_list, ff_list, rec_list = [], [], []
-        self.W_hebb_history = []
+        W_hebb_history = []
+        adapt_list = []
 
         # Temporal loop
         for step in range(self.N_STEPS):
@@ -457,7 +458,7 @@ class Network(nn.Module):
                             #     self.W_hebb_history.append(W_hebb[:, self.slices[j], self.slices[i]])
 
                             # Wab_T[:, self.slices[j], self.slices[i]] = self.Wab_T[self.slices[j], self.slices[i]].unsqueeze(0)
-                            Wab_T[:, self.slices[j], self.slices[i]] = W_hebb[:, self.slices[j], self.slices[i]]
+                            Wab_T[:, self.slices[j], self.slices[i]] += W_hebb[:, self.slices[j], self.slices[i]]
                 # print(W_hebb.mean())
                 # self.W_hebb_history.append(W_hebb_) #W_hebb[:, self.slices[j], self.slices[i]])
 
@@ -526,6 +527,15 @@ class Network(nn.Module):
                     if self.IF_STP and RET_STP:
                         self.x_list.append(self.stp[0].x_stp)
                         self.u_list.append(self.stp[0].u_stp)
+                    if self.IF_ADAPT and RET_ADAPT:
+                        adapt_list.append(
+                        thresh[:, self.slices[0]].detach().clone())
+                    if self.IF_HEBB and RET_HEBB:
+                        W_hebb_history.append(
+                            W_hebb[:, self.slices[0], self.slices[0]]
+                            .mean(dim=1)
+                            .detach())
+                    
 
                 mv_rates = 0
                 mv_ff = 0
@@ -552,6 +562,12 @@ class Network(nn.Module):
             if self.IF_STP and RET_STP:  # returns stp u and x
                 self.u_list = torch.stack(self.u_list, dim=1)
                 self.x_list = torch.stack(self.x_list, dim=1)
+
+            if self.IF_ADAPT and RET_ADAPT:
+                self.adapt_list = torch.stack(adapt_list, dim=1)
+
+            if self.IF_HEBB and RET_HEBB:
+                self.W_hebb_history = torch.stack(W_hebb_history, dim=1)
 
         if self.LR_TRAIN:
             self.readout = rates @ self.low_rank.V[self.slices[0]] / self.Na[0]
