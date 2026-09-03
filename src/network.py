@@ -187,6 +187,8 @@ class Network(nn.Module):
         thresh = self.thresh[:ff_input.shape[0]]
 
         rec_input = torch.randn((self.IF_NMDA + 1, self.N_BATCH, self.N_NEURON), device=self.device)
+        rec_input[0] -= 40
+        # rec_input = torch.zeros((self.IF_NMDA + 1, self.N_BATCH, self.N_NEURON),device=self.device)
 
         if self.LIVE_FF_UPDATE:
             ff = ff_input
