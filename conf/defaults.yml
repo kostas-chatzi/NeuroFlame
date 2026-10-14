@@ -231,3 +231,9 @@ T_HEBB: 0
 ETA: 0.1
 HEBB_TYPE: 'bcm'
 STIM_EI: 0
+# ============================================================
+# IF_RAMP_INP: Turn ramp input on/off for ODR delay period
+#   0 = off (default, maintains existing behavior)
+#   1 = on (adds uniform untuned linear ramp during delay)
+# ============================================================
+IF_RAMP_INP: 0

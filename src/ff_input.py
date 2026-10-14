@@ -63,7 +63,19 @@ def live_ff_input(model, step, ff_input):
         if step in model.N_STIM_OFF:
             ff_input[:, model.slices[0]] = model.Ja0[:, 0]
 
-    return ff_input + noise
+    # return ff_input + noise
+    out = ff_input + noise  # new tensor, safe to modify in place
+
+    if model.IF_RAMP_INP and "odr" in model.TASK:
+        delay_start = int(model.N_STIM_OFF[0])
+        delay_end = int(model.N_STIM_ON[1])
+        if step >= delay_start and step < delay_end:
+            n = delay_end - delay_start
+            frac = (step - delay_start) / max(n - 1, 1)  # matches linspace(0, 1, n)
+            ramp = model.RAMP_MAX * model.I0[0] * frac
+            out[:, model.slices[0]] += ramp
+
+    return out
 
 
 def init_ff_live(model):
@@ -141,6 +153,9 @@ def init_ff_seq(model):
         sizeI = (model.N_BATCH, model.Na[1])
         StimulusI = Stimuli(model.TASK, sizeI, device=model.device)
 
+
+        # ============================================================
+
         if "flow" in model.TASK:
             grid_inputs = get_grid_inputs(model)
 
@@ -217,6 +232,30 @@ def init_ff_seq(model):
                         ff_input[:, model.N_STIM_ON[i]:model.N_STIM_OFF[i], model.slices[1]].add_(stimulusI)
 
             del stimulus, stimulusI
+
+        # ============================================================
+        # IF_RAMP_INP: Add uniform untuned linear ramp during delay period
+        # ============================================================
+        if model.IF_RAMP_INP and "odr" in model.TASK:
+            # Delay period is between end of first stimulus and start of second
+            delay_start = model.N_STIM_OFF[0]  # step where first stimulus ends
+            delay_end = model.N_STIM_ON[1]     # step where second stimulus begins
+
+            if delay_end > delay_start:
+                # Create linear ramp from 0 to RAMP_MAX over the delay period
+                # We use RAMP_MAX scaled by Ja0 to be consistent with stimulus magnitude
+                ramp_mag = model.RAMP_MAX * model.I0[0]
+
+                # Generate ramp values for each timestep in the delay
+                # Shape: (1, delay_end - delay_start, 1) for broadcasting
+                ramp_values = torch.linspace(0, ramp_mag, delay_end - delay_start, device=model.device)
+                ramp_values = ramp_values.view(1, -1, 1)
+
+                # Add ramp to ff_input during delay period
+                ff_input[:, delay_start:delay_end, model.slices[0]].add_(ramp_values)
+
+
+
 
         if "flow" in model.TASK:
             del grid_inputs
